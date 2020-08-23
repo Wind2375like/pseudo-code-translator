@@ -10,6 +10,12 @@ int main () {
 }
 
 int buf(a) {
+b = a;
 return a;
 }
 
+int k(v) {
+int a = v;
+j = a;
+return a;
+}

@@ -2,6 +2,7 @@ import ply.yacc as yacc
 
 # Get the token map from the lexer.  This is required.
 from pcodelex import pcodeLexer
+import re
 
 class pcodeParser: 
     def __init__(
@@ -18,6 +19,7 @@ class pcodeParser:
         self.is_type = set(("int", "float", "char", "string", "bool", "void"))
         self.funcs = set()
         self.funcs_defines = set()
+        self.par_to_be_init = set()
 
     def _check_type(self, str):
         """ Check the variable types inputed by users.
@@ -57,8 +59,18 @@ class pcodeParser:
                     | MAIN LPAREN RPAREN chunk
                     | MAIN LPAREN expression COMMA expression RPAREN chunk
                     """
-        p[0] = "int main(int argc, char *argv[])" + p[len(p)-1]
+        tmp = p[len(p)-1]
+        h = ""
+        for j in self.par_to_be_init:
+            h = h+j+"\n"
+        i = tmp.find("{")
+        tmp = list(tmp)
+        tmp.insert(i+2, h)
+        tmp = "".join(tmp)
+        p[0] = "int main(int argc, char *argv[])" + tmp
         self.main_function = p[0]
+        self.is_defined = set()
+        self.par_to_be_init = set()
 
     # Statements
     def p_statements(self, p):
@@ -72,7 +84,7 @@ class pcodeParser:
 
     # function define
     def p_func_define(self, p):
-        """ func_define : func_head chunk"""
+        """ func_define : func_head func_body """
         p[0] = p[1] + p[2]
         self.funcs_defines.add(p[0])
 
@@ -84,10 +96,25 @@ class pcodeParser:
             print("What's the type of %s" %p[1])
             t = str(input()).strip()
             p[0] = t + " " + _add_all(p[1:])
+            self.is_defined.add(p[1])
         else:
             p[0] = p[1] + " " + _add_all(p[2:])
+            self.is_defined.add(p[2])
 
         self.funcs.add(p[0]+";")
+
+    def p_func_body(self, p):
+        """ func_body   : chunk"""
+        tmp = p[1]
+        h = ""
+        for j in self.par_to_be_init:
+            h = h+j+"\n"
+        i = tmp.find("{")
+        tmp = list(tmp)
+        tmp.insert(i+2, h)
+        p[0] = "".join(tmp)
+        self.par_to_be_init = set()
+        self.is_defined = set()
 
 
     def p_func_pars(self, p):
@@ -295,7 +322,7 @@ class pcodeParser:
                 t = t.strip()
                 t = self._check_type(t)
                 self.is_defined.add(p[1])
-                p[0] = t + " " + p[0]
+                self.par_to_be_init.add(t+" "+p[1]+";")
         elif len(p) == 6:
             self.is_defined.add(p[2])
             p[0] = p[1] + " " + p[2] + p[3] + p[4] + p[5]
@@ -392,13 +419,20 @@ def _add_all(p, delimited=""):
     ret = ret + p[-1]
     return ret
 
-# Build the parser and try it out
-m = pcodeParser()
-m.build()           # Build the parser
-with open("./pcode1.txt", "r", encoding="utf-8") as f:
-    data = f.readlines()
-data = "".join(data)
-code = m.test(data)
+if __name__ == "__main__":
+    import sys
+    from pretty_code import index_code
+    # Build the parser and try it out
+    file_input = "./pcode1.txt"
+    file_output = "./output.c"
 
-with open("output.c", "w") as f:
-    f.write(code)
+    m = pcodeParser()
+    m.build()           # Build the parser
+    with open(file_input, "r", encoding="utf-8") as f:
+        data = f.readlines()
+    data = "".join(data)
+    code = m.test(data)
+    code = index_code(code)
+
+    with open(file_output, "w") as f:
+        f.write(code)
