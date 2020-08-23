@@ -12,11 +12,12 @@ class pcodeParser:
             is_type     : a set of legal types
         """
         self.plex = lexer()
-        self.plex.build(debug=1)
+        self.plex.build(debug=0)
         self.tokens = self.plex.tokens
         self.is_defined = set()
         self.is_type = set(("int", "float", "char", "string", "bool", "void"))
-        self.func_declars = set()
+        self.funcs = set()
+        self.funcs_defines = set()
 
     def _check_type(self, str):
         """ Check the variable types inputed by users.
@@ -27,9 +28,23 @@ class pcodeParser:
             str = input()
             str = str.strip()
         return str 
+    
+    def p_pretty_code(self, p):
+        """ pretty_code :   c_code"""
+        h = ""
+        for i in self.funcs:
+            h = h + i + "\n"
+
+        t = ""
+        for i in self.funcs_defines:
+            t = t + i + "\n"
+
+        p[0] = h + self.main_function +"\n" + t
 
     def p_c_code(self, p):
-        """ c_code  : main
+        """ c_code  : c_code c_code
+                    | main
+                    | statements
                     """
         if len(p) == 3:
             p[0] = p[1] + "\n" + p[2]
@@ -38,14 +53,13 @@ class pcodeParser:
     
     # Main function
     def p_main(self, p):
-        """ main    : statements """
-        p[0] = "int main(int argc, char *argv[]) {\n%s\nreturn 0;\n}" % p[1]
+        """ main    : vartype MAIN LPAREN RPAREN chunk
+                    | MAIN LPAREN RPAREN chunk
+                    | MAIN LPAREN expression COMMA expression RPAREN chunk
+                    """
+        p[0] = "int main(int argc, char *argv[])" + p[len(p)-1]
+        self.main_function = p[0]
 
-        h = ""
-        for t in self.func_declars:
-            h = h+t+";\n"
-
-        p[0] = h + p[0]
     # Statements
     def p_statements(self, p):
         """ statements  : statement statements
@@ -58,22 +72,44 @@ class pcodeParser:
 
     # function define
     def p_func_define(self, p):
-        """ func_define : call_func_1 func_body"""
-        if p[1] in self.func_declars:
-            print("Mult defines")
-        else:
-            print("What's the return type of function")
-            t = str(input())
-            t = t.strip()
-            self.func_declars.add(t + " " + p[1])
-
+        """ func_define : func_head chunk"""
         p[0] = p[1] + p[2]
+        self.funcs_defines.add(p[0])
 
-    def p_func_body(self, p):
-        """ func_body   : LBRACE statements return RBRACE
-                        | LBRACE return RBRACE
-                        """
-        p[0] = _add_all(p[1:], delimited="\n")
+    def p_func_head(self, p):
+        """ func_head   : ID LPAREN func_pars RPAREN
+                        | vartype ID LPAREN func_pars RPAREN
+        """
+        if len(p) == 5:
+            print("What's the type of %s" %p[1])
+            t = str(input()).strip()
+            p[0] = t + " " + _add_all(p[1:])
+        else:
+            p[0] = p[1] + " " + _add_all(p[2:])
+
+        self.funcs.add(p[0]+";")
+
+
+    def p_func_pars(self, p):
+        """ func_pars   : func_par COMMA func_pars
+                        | func_par 
+        """
+        if len(p) == 4:
+            p[0] = p[1] + ", " + p[3]
+        else:
+            p[0] = p[1]
+
+    def p_func_par(self, p):
+        """ func_par    : vartype ID
+                        | ID
+        """
+        if len(p) == 3:
+            p[0] = p[0] + " " + p[1]
+        else:
+            print("What's the type of %s" %p[1])
+            t = str(input()).strip()
+            p[0] = t + " " + p[1]
+
 
     def p_return(self, p):
         """ return  : RETURN expression SEMI """
@@ -181,6 +217,7 @@ class pcodeParser:
     # Chunk: {statements} 
     def p_chunk(self, p):
         """ chunk   : LBRACE statements RBRACE"""
+        self.index_num += 1
         p[0] = "{\n" + p[2] + "\n}"
 
     def p_statement(self, p):
@@ -191,6 +228,7 @@ class pcodeParser:
                         | while
                         | call_func_2
                         | func_define
+                        | return
         """
         p[0] = p[1]
 
@@ -346,7 +384,7 @@ class pcodeParser:
     def test(self, data):
         self.plex.test(data)   
         result = self.parser.parse(data)
-        print(result)
+        return result
 
 def _add_all(p, delimited=""):
     ret = ""
@@ -361,4 +399,7 @@ m.build()           # Build the parser
 with open("./pcode1.txt", "r", encoding="utf-8") as f:
     data = f.readlines()
 data = "".join(data)
-m.test(data)
+code = m.test(data)
+
+with open("output.c", "w") as f:
+    f.write(code)
