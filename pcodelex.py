@@ -44,6 +44,7 @@ class pcodeLexer:
         'False'   : 'FALSE',
         'to'      : 'TO',
         'by'      : 'BY',
+        'char'    : 'CHAR',
     }
 
     ##
