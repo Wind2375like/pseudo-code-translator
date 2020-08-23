@@ -217,7 +217,6 @@ class pcodeParser:
     # Chunk: {statements} 
     def p_chunk(self, p):
         """ chunk   : LBRACE statements RBRACE"""
-        self.index_num += 1
         p[0] = "{\n" + p[2] + "\n}"
 
     def p_statement(self, p):
