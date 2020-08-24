@@ -20,6 +20,7 @@ class pcodeParser:
         self.funcs = set()
         self.funcs_defines = set()
         self.par_to_be_init = set()
+        self.main_function = ""
 
     def _check_type(self, str):
         """ Check the variable types inputed by users.
@@ -56,7 +57,8 @@ class pcodeParser:
     def p_c_code(self, p):
         """ c_code  : c_code c_code
                     | main
-                    | statements
+                    | assignment
+                    | func_define
                     """
         if len(p) == 3:
             p[0] = p[1] + "\n" + p[2]
@@ -284,7 +286,6 @@ class pcodeParser:
                         | for
                         | while
                         | call_func_2
-                        | func_define
                         | single_elem_stmt
                         | swap
                         | return

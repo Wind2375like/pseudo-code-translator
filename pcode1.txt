@@ -1,34 +1,6 @@
 int main () {
-	
-	a++;
-
 	k(a);
-	a = buf(b);
-	a<->b;
-
-	for i = 1 to 10 {
-		a = a + 2 * i;
-	}
-
-	while a >= 0{
-		a = a - 2 * i;
-	}
-
-	if a == 0 and a != b{
-		a += b;
-	}
-	
-	for i = a to b{
-		brr[i++] = i;
-	}
-	arr[a to b] = brr[b to a];
-
 	return 0;
-}
-
-int buf(a) {
-	b = a;
-	return a;
 }
 
 int k(v) {
