@@ -46,6 +46,7 @@ class pcodeLexer:
         'by'      : 'BY',
         'char'    : 'CHAR',
         'main'    : 'MAIN',
+        'swap'    : 'SWAP',
     }
 
     ##
@@ -60,11 +61,10 @@ class pcodeLexer:
 
         # Operators
         'NE', 'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'MOD',
-        'BI_BOOL_OP', 'MON_BOOL_OP',
-#        'LT', 'LE', 'GT', 'GE', 'EQ', 
+        'LT', 'LE', 'GT', 'GE', 'EQ', 
 
         # Assignment
-        'EQUALS', 'TIMESEQUAL', 'DIVEQUAL', 'MODEQUAL',
+        'EQUAL', 'TIMESEQUAL', 'DIVEQUAL', 'MODEQUAL',
         'PLUSEQUAL', 'MINUSEQUAL',
 
         # Increment/decrement
@@ -108,35 +108,35 @@ class pcodeLexer:
     t_STRING_CONST              = r'("|\').*("|\')'
 
     # Operators
-#    t_LE                        = r'<='
-#    t_GE                        = r'>='
-#    t_EQ                        = r'=='
-#    t_NE                        = r'!='
-#    t_LT                        = r'<'
-#    t_GT                        = r'>'
+    t_LE                        = r'<='
+    t_GE                        = r'>='
+    t_EQ                        = r'=='
+    t_NE                        = r'!='
+    t_LT                        = r'<'
+    t_GT                        = r'>'
     t_PLUS                      = r'\+'
     t_MINUS                     = r'\-'
     t_TIMES                     = r'\*'
     t_DIVIDE                    = r'/'
     t_MOD                       = r'%'
-#    t_OR                        = r'\|\|'      
-#    t_AND                       = r'&&'
-#    t_NOT                       = r'!'
+    t_OR                        = r'\|\|'      
+    t_AND                       = r'&&'
+    t_NOT                       = r'!'
 
-    t_BI_BOOL_OP               = r'(\|\|)|(&&)|(>=)|(<=)|(==)|(!=)|(<)|(>)'
-    t_MON_BOOL_OP                = r'!'
+    # t_BI_BOOL_OP                = r'(\|\|)|(&&)|(>=)|(<=)|(==)|(!=)|(<)|(>)'
+    # t_MON_BOOL_OP               = r'!'
 
     # Assignments
-    t_EQUALS                    = r'='
+    t_EQUAL                    = r'='
     t_TIMESEQUAL                = r'\*='
     t_DIVEQUAL                  = r'/='
     t_MODEQUAL                  = r'%='
     t_PLUSEQUAL                 = r'\+='
-    t_MINUSEQUAL                = r'-='
+    t_MINUSEQUAL                = r'\-='
 
     # Increment/decrement
     t_PLUSPLUS          = r'\+\+'
-    t_MINUSMINUS        = r'--'
+    t_MINUSMINUS        = r'\-\-'
 
     # Delimeters
     t_LPAREN            = r'\('
