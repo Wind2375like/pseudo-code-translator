@@ -13,7 +13,7 @@ class pcodeParser:
             is_type     : a set of legal types
         """
         self.plex = lexer()
-        self.plex.build(debug=0)
+        self.plex.build(debug=1)
         self.tokens = self.plex.tokens
         self.is_defined = set()
         self.is_type = set(("int", "float", "char", "string", "bool", "void"))
@@ -29,7 +29,17 @@ class pcodeParser:
             print("{} is not a type. Input a correct type.". format(str))
             str = input()
             str = str.strip()
-        return str 
+        return str
+
+    def correct_bool(self, str):
+        """ Correct and, or, not to &&, ||, !
+        """
+
+        if str == "and"  : return "&&"
+        if str == "or"   : return "||"
+        if str == "not"  : return "!"
+        return str
+
     
     def p_pretty_code(self, p):
         """ pretty_code :   c_code"""
@@ -81,6 +91,27 @@ class pcodeParser:
             p[0] = p[1]
         else:
             p[0] = p[1] + "\n"+ p[2]
+
+    # call void functions
+    def p_call_func_2(self, p):
+        """ call_func_2     : call_func_1 SEMI
+        """
+        p[0] = p[1] + p[2]
+
+    # used for expressions
+    def p_call_func_1(self, p):
+        """ call_func_1     : ID LPAREN call_func_var RPAREN
+        """
+        p[0] = p[1] + p[2] + p[3] + p[4]
+
+    def p_call_func_var(self, p):
+        """ call_func_var   : expression COMMA call_func_var
+                            | expression
+        """
+        if len(p) == 4:
+            p[0] = p[1] + "," + " " + p[3]
+        else:
+            p[0] = p[1]
 
     # function define
     def p_func_define(self, p):
@@ -254,28 +285,11 @@ class pcodeParser:
                         | while
                         | call_func_2
                         | func_define
+                        | single_elem_stmt
+                        | swap
                         | return
         """
         p[0] = p[1]
-
-    def p_call_func_1(self, p):
-        """ call_func_1     : ID LPAREN call_func_var RPAREN
-        """
-        p[0] = p[1] + p[2] + p[3] + p[4]
-
-    def p_call_func_2(self, p):
-        """ call_func_2     : ID LPAREN call_func_var RPAREN SEMI
-        """
-        p[0] = p[1] + p[2] + p[3] + p[4] + p[5]
-
-    def p_call_func_var(self, p):
-        """ call_func_var   : expression COMMA call_func_var
-                            | expression
-        """
-        if len(p) == 4:
-            p[0] = p[1] + "," + " " + p[3]
-        else:
-            p[0] = p[1]
 
     def p_arr_assignment(self, p):
         """ arr_assignment  : ID LBRACKET expression RBRACKET EQUALS expression SEMI
@@ -284,15 +298,15 @@ class pcodeParser:
         if len(p) == 8:
             p[0] = p[1] + p[2] + p[3] + p[4] + p[5] + p[6] + ";"
         if len(p) == 10:
-            p[0] = "for(int i = 0; i <= %s-%s; i++)\n%s[%s+i]%s%s;"%(p[5], p[3], p[1], p[3], p[7], p[8])
+            p[0] = "for(int i = 0; i <= %s-%s; i++) %s[%s+i]%s%s;"%(p[5], p[3], p[1], p[3], p[7], p[8])
 
-        # if not p[1] in self.is_defined:
-        #         print("What's the type of {}". format(p[1]))
-        #         t = input()
-        #         t = t.strip()
-        #         t = self._check_type(t)
-        #         self.is_defined.add(p[1])
-        #         p[0] = t + " " + p[0]
+        if not p[1] in self.is_defined:
+            print("What's the type of {}". format(p[1]))
+            t = input()
+            t = t.strip()
+            t = self._check_type(t)
+            self.is_defined.add(p[1])
+            self.par_to_be_init.add(t+" "+p[1]+"[MAXLENGTH]"+";")
 
     # Variable types:
     def p_vartype(self, p):
@@ -308,10 +322,22 @@ class pcodeParser:
         else:
             p[0] = p[1]
 
+    #Swap
+    def p_swap(self, p):
+        """ swap    : ID LT MINUS GT ID SEMI
+                    | SWAP LPAREN ID COMMA ID RPAREN SEMI
+        """
+        if len(p) == 7:
+            p[0] = "swap(%s, %s)"%(p[1], p[5])
+        else:
+            p[0] = "swap(%s, %s)"%(p[3], p[5])
+
+
     # Assignment
     def p_assignment(self, p):
         """ assignment  : ID EQUALS expression SEMI
                         | ID EQUALS boolexpre SEMI
+                        | vartype ID EQUALS expression SEMI
                         | vartype ID EQUALS boolexpre SEMI
         """
         if len(p) == 5:
@@ -327,10 +353,42 @@ class pcodeParser:
             self.is_defined.add(p[2])
             p[0] = p[1] + " " + p[2] + p[3] + p[4] + p[5]
 
+    # EQUALS
+    def p_EQUALS(self, p):
+        """ EQUALS      : EQUAL
+                        | TIMESEQUAL
+                        | DIVEQUAL
+                        | MODEQUAL
+                        | PLUSEQUAL
+                        | MINUSEQUAL
+        """
+        p[0] = p[1]
+
+    # BI_BOOL_OP and MON_BOOL_OP
+    def p_BI_BOOL_OP(self, p):
+        """ BI_BOOL_OP  : LE
+                        | GE
+                        | LT
+                        | GT
+                        | EQ
+                        | NE
+                        | AND
+                        | OR
+        """
+        p[0] = p[1]
+    
+    def p_MON_BOOL_OP(self, p):
+        """ MON_BOOL_OP : NOT
+        """
+        p[0] = p[1]
+
     def p_iterator(self, p):
         """ iterator    : ID EQUALS expression
                         | ID PLUSPLUS
-                        """
+                        | ID MINUSMINUS
+                        | PLUSPLUS ID
+                        | MINUSMINUS ID
+        """
         if len(p) == 3:
             p[0] = p[1] + p[2]
         else:
@@ -346,10 +404,13 @@ class pcodeParser:
                         | INT_CONST_DEC"""
 
         if len(p) == 2:
+            p[1] = self.correct_bool(p[1])
             p[0] = p[1]
         elif len(p) == 3:
+            p[1] = self.correct_bool(p[1])
             p[0] = p[1] + p[2]
         else:
+            p[2] = self.correct_bool(p[2])
             p[0] = p[1] + p[2] + p[3]
 
     def p_array_elem_sing(self, p):
@@ -362,18 +423,42 @@ class pcodeParser:
         """
         p[0] = p[1] + p[2] + p[3] + "+i" + p[6]
 
+    def p_single_elem_stmt(self, p):
+        """ single_elem_stmt    : ID PLUSPLUS SEMI
+                                | ID MINUSMINUS SEMI
+        """
+        p[0] = p[1] + p[2] + ";"
+
+        if not p[1] in self.is_defined:
+            print("What's the type of {}". format(p[1]))
+            t = input()
+            t = t.strip()
+            t = self._check_type(t)
+            self.is_defined.add(p[1])
+            self.par_to_be_init.add(t+" "+p[1]+";")
+
+    def p_single_elem(self, p):
+        """ single_elem : array_elem_sing
+                        | array_elem_multi
+                        | INT_CONST_DEC 
+                        | FLOAT_CONST_DEC 
+                        | STRING_CONST
+                        | ID
+                        | ID PLUSPLUS
+                        | ID MINUSMINUS 
+                        | call_func_1
+        """
+        if len(p) == 2:
+            p[0] = p[1]
+        else:
+            p[0] = p[1] + p[2]
+
     def p_expressions(self, p):
         """ expression  : expression PLUS expression 
                         | expression MINUS expression 
                         | expression TIMES expression 
                         | expression DIVIDE expression
-                        | array_elem_sing
-                        | array_elem_multi
-                        | INT_CONST_DEC 
-                        | FLOAT_CONST_DEC 
-                        | STRING_CONST
-                        | ID 
-                        | call_func_1
+                        | single_elem
                         | LPAREN expression RPAREN 
         """
         self.precedence = (
@@ -389,12 +474,6 @@ class pcodeParser:
         
         if len(p) == 4:
             p[0] = p[1] + p[2] + p[3]
-        
-        # elif len(p) == 3:
-        #     if p[1] == '-':
-        #         p[0] = -p[2]
-        #     elif p[1] == '+':
-        #         p[0] = p[2]
         elif len(p) == 2: 
             p[0] = p[1]
 
