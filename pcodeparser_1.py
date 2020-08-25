@@ -24,9 +24,9 @@ class pcodeParser:
         self.par_info = dict()              # parameters information
         self.completed_par = set()          # completed parameters definition
         self.func_pars = dict()             # functions' parameter and type
-        self.buf = [[], []]                       # buf
+        self.buf = [[], []]                 # buf
         self.main_function = ""             # main function information
-        self.cur_func = ""                  # current function name
+        self.cur_func = "main"              # current function name
         self.flag = 0                       # flag
 
     def _define_parameter(self, t, name, init_val=None):
@@ -50,7 +50,11 @@ class pcodeParser:
         :param where:   where it appeared
         :return:        None
         """
-        self.par_to_be_init[name] = where
+
+        if name in self.par_to_be_init.keys():
+            self.par_to_be_init[name].join(where)
+        else:
+            self.par_to_be_init[name] = where
 
     def _clean_buf(self):
         """
@@ -59,7 +63,7 @@ class pcodeParser:
         """
         self.par_to_be_init.clear()
         self.par_info.clear()
-        self.cur_func = ""
+        self.cur_func = "main"
         self.completed_par.clear()
         self.is_defined.clear()
         self.func_pars.clear()
@@ -136,9 +140,10 @@ class pcodeParser:
                     | MAIN LPAREN RPAREN chunk
                     | MAIN LPAREN expression COMMA expression RPAREN chunk
                     """
+        self._query_parameters()
         tmp = p[len(p) - 1]
         h = ""
-        for j in self.par_to_be_init:
+        for j in self.completed_par:
             h = h + j + "\n"
         i = tmp.find("{")
         tmp = list(tmp)
@@ -357,7 +362,8 @@ class pcodeParser:
                         | return
         """
         p[0] = p[1]
-        self.buf[0] = p[0]
+        self.buf[1] = p[0]
+        self.buf[0] = []
 
     def p_arr_assignment(self, p):
         """ arr_assignment  : ID LBRACKET expression RBRACKET EQUALS expression SEMI
@@ -410,7 +416,9 @@ class pcodeParser:
         if len(p) == 5:
             p[0] = p[1] + p[2] + p[3] + p[4]
             if not p[1] in self.par_to_be_init.keys():
-                self._add_parameter(p[1], where=p[0])
+                self.flag = 1
+                self.buf[0] = p[1]
+                self._add_parameter(p[1], where="".join(self.buf[1]) + p[0])
 
         elif len(p) == 6:
             self.is_defined.add(p[2])
