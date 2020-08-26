@@ -159,6 +159,7 @@ class pcodeLexer:
         print ("Illegal character '%s'" % t.value[0])
         t.lexer.skip(1)
 
+
 if __name__ == '__main__':
     # Build the lexer and try it out
     m = pcodeLexer()
