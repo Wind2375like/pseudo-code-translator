@@ -76,7 +76,7 @@ class pcodeParser:
         :return: None
         """
         for par_name, where in self.par_to_be_init.items():
-            print("What's the type of {}? ({} in function {})" .format(par_name, where, self.cur_func))
+            print("{}\nWhat's the type of {} in function {}?" .format(where, par_name, self.cur_func))
             t = str(input()).strip()
             t = self._check_type(t)
             print("What's the initiate value of {}? (default is 0)". format(par_name))
@@ -116,12 +116,13 @@ class pcodeParser:
         h = ""
         for i in self.funcs:
             h = h + i + "\n"
+        h = h + "\n"
 
         t = ""
         for i in self.funcs_defines:
-            t = t + i + "\n"
+            t = t + i + "\n\n"
 
-        p[0] = h + self.main_function + "\n" + t
+        p[0] = h + self.main_function + "\n\n" + t
 
     def p_c_code(self, p):
         """ c_code  : c_code c_code
@@ -362,7 +363,7 @@ class pcodeParser:
                         | return
         """
         p[0] = p[1]
-        self.buf[1] = p[0]
+        self.buf[1] = "\n{}" .format(p[0])
         self.buf[0] = []
 
     def p_arr_assignment(self, p):
@@ -416,9 +417,8 @@ class pcodeParser:
         if len(p) == 5:
             p[0] = p[1] + p[2] + p[3] + p[4]
             if not p[1] in self.par_to_be_init.keys():
-                self.flag = 1
                 self.buf[0] = p[1]
-                self._add_parameter(p[1], where="".join(self.buf[1]) + p[0])
+                self._add_parameter(p[1], where="".join(self.buf[1]) + "\n" + p[0])
 
         elif len(p) == 6:
             self.is_defined.add(p[2])
