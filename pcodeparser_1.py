@@ -363,6 +363,8 @@ class pcodeParser:
                         | return
         """
         p[0] = p[1]
+        # [TODO: adapt the format and try to add correct line number.]
+        # [TODO: gain the next statement after parameter definition.]
         self.buf[1] = "\n{}" .format(p[0])
         self.buf[0] = []
 
@@ -418,6 +420,7 @@ class pcodeParser:
             p[0] = p[1] + p[2] + p[3] + p[4]
             if not p[1] in self.par_to_be_init.keys():
                 self.buf[0] = p[1]
+                # [TODO: adapt the format and try to add correct line number]
                 self._add_parameter(p[1], where="".join(self.buf[1]) + "\n" + p[0])
 
         elif len(p) == 6:
