@@ -1,5 +1,7 @@
 from variable_info import VarInfo
 
+# [TODO: complete the FuncInfo to store the function inforamation]
+
 class FuncInfo():
     def __init__(self,
                  name,
