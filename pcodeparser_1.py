@@ -2,6 +2,7 @@ import ply.yacc as yacc
 
 # Get the token map from the lexer.  This is required.
 from pcodelex import pcodeLexer
+from variable_info import VarInfo
 import re
 
 
@@ -16,45 +17,30 @@ class pcodeParser:
         self.plex = lexer()
         self.plex.build(debug=1)
         self.tokens = self.plex.tokens
+        # [TODO: replace is define with par_to_be_init]
         self.is_defined = set()
         self.is_type = {"int", "float", "char", "string", "bool", "void"}
         self.funcs = set()                  # function declarations
         self.funcs_defines = set()          # function definitions
-        self.par_to_be_init = dict()        # parameters to be init
-        self.par_info = dict()              # parameters information
-        self.completed_par = set()          # completed parameters definition
+        self.par_to_be_init = dict()        # parameters to be init: {'par_name': var_info}
         self.func_pars = dict()             # functions' parameter and type
-        self.buf = [[], []]                 # buf
+        self.buf = []                       # buf
         self.main_function = ""             # main function information
         self.cur_func = "main"              # current function name
         self.flag = 0                       # flag
 
-    def _define_parameter(self, t, name, init_val=None):
-        """
-        usage: define the parameters
-        :param t:           type
-        :param name:        parameter's name
-        :param init_val:    initiate value
-        :return:            None
-        """
-        self.par_info[name] = [t, init_val]
-        if init_val is not None:
-            self.completed_par.add("{} {} = {};" .format(t, name, init_val))
-        else:
-            self.completed_par.add("{} {};" .format(t, name))
-
-    def _add_parameter(self, name, where):
-        """
-        usage: record the name and where it appeared
-        :param name:    parameter name
-        :param where:   where it appeared
-        :return:        None
+    def _add_parameter(self, name, **kwargs):
         """
 
-        if name in self.par_to_be_init.keys():
-            self.par_to_be_init[name].join(where)
-        else:
-            self.par_to_be_init[name] = where
+        :param name:
+        :param lineno:
+        :param line_statement:
+        :param hint_type:
+        :param is_array:
+        :return:
+        """
+        var_info = VarInfo(name, **kwargs)
+        self.par_to_be_init[name] = var_info
 
     def _clean_buf(self):
         """
@@ -62,12 +48,10 @@ class pcodeParser:
         :return: None
         """
         self.par_to_be_init.clear()
-        self.par_info.clear()
         self.cur_func = "main"
-        self.completed_par.clear()
         self.is_defined.clear()
         self.func_pars.clear()
-        self.buf = [[], []]
+        self.buf.clear()
         self.flag = 0
 
     def _query_parameters(self):
@@ -75,22 +59,56 @@ class pcodeParser:
         usage: query the parameters information and complete the definition
         :return: None
         """
-        for par_name, where in self.par_to_be_init.items():
-            print("{}\nWhat's the type of {} in function {}?" .format(where, par_name, self.cur_func))
-            t = str(input()).strip()
-            t = self._check_type(t)
-            print("What's the initiate value of {}? (default is 0)". format(par_name))
-            init_val = input()
-            if init_val == '':
-                init_val = 0
-            elif init_val.isdigit():
-                init_val = int(init_val)
-            elif init_val.isdecimal():
-                init_val = float(init_val)
-            elif len(re.findall(r'".*"', init_val)) == 0:
-                init_val = '"{}"' .format(init_val)
+        for par_name in self.par_to_be_init.keys():
+            var_info = self.par_to_be_init[par_name]
+            if var_info.is_defined == False:
+                where = "In line {:<5}{}" .format(var_info.line_no, var_info.line_statement)
+                if var_info.init_method == "normal":
+                    print("\n{}\nWhat's the type of {} in function {}?" .format(where, par_name, self.cur_func))
+                else:
+                    print("\n{}\nWhat's the element type of array {} in function {}?" .format(where, par_name, self.cur_func))
+                print("Types available: int, float, char, string, bool, void")
+                t = str(input()).strip()
+                t = self._check_type(t)
 
-            self._define_parameter(t, par_name, init_val)
+                """
+                init_val examples:
+                ''      -> 0
+                '4'     -> 4
+                '4.3'   -> 4.3
+                '"a"'   -> 'a'
+                '"abcd"'-> "abcd"
+                "'a'"   -> 'a'
+                "'abc'" -> "abc"
+                'a'     -> 'a'
+                'abcd'  -> "abcd"
+                """
+                print("What's the initial value of {}? (default is 0)". format(par_name))
+                init_val = str(input()).strip()
+                if init_val == '':
+                    init_val = 0
+                elif init_val.isdecimal():
+                    init_val = int(init_val)
+                else:
+                    try:
+                        init_val = float(init_val)
+                    except ValueError:
+                        if (len(re.findall(r'"(.*)"', init_val)) == 1):
+                            init_val = re.findall(r'"(.*)"', init_val)[0]
+                        elif (len(re.findall(r"'(.*)'", init_val)) == 1):
+                            init_val = re.findall(r"'(.*)'", init_val)[0]
+
+                        if len(init_val) == 1:
+                            init_val = "'{}'" .format(init_val)
+                        else:
+                            init_val = '"{}"' .format(init_val)
+                
+                var_info.set_init_val(init_val)
+                var_info.set_var_type(t)
+                var_info.make_definition()
+            else:
+                # [TODO: 并查集？]
+                pass
 
     def _check_type(self, str):
         """ Check the variable types inputed by users.
@@ -139,13 +157,17 @@ class pcodeParser:
     def p_main(self, p):
         """ main    : vartype MAIN LPAREN RPAREN chunk
                     | MAIN LPAREN RPAREN chunk
-                    | MAIN LPAREN expression COMMA expression RPAREN chunk
+                    | MAIN LPAREN ID COMMA ID RPAREN chunk
                     """
         self._query_parameters()
+
+        # initialize parameters
         tmp = p[len(p) - 1]
         h = ""
-        for j in self.completed_par:
-            h = h + j + "\n"
+        for v in self.par_to_be_init.values():
+            if v.is_defined == False:
+                j = v.definition
+                h = h + j + "\n"
         i = tmp.find("{")
         tmp = list(tmp)
         tmp.insert(i + 2, h)
@@ -191,8 +213,12 @@ class pcodeParser:
         self._query_parameters()
         tmp = p[2]
         h = ""
-        for j in self.completed_par:
-            h = h + j + "\n"
+
+        # initialize parameters
+        for v in self.par_to_be_init.values():
+            if v.is_defined == False:
+                j = v.definition
+                h = h + j + "\n"
         i = tmp.find("{")
         tmp = list(tmp)
         tmp.insert(i + 2, h)
@@ -206,14 +232,18 @@ class pcodeParser:
                         | vartype ID LPAREN func_pars RPAREN
         """
         if len(p) == 5:
-            print("What's the type of function %s?" % p[1])
+            p[0] = " " + _add_all(p[1:])
+            line_no = p.lineno(1)
+            line_statement = p[0]
+            where = "In line {:<5}{}" .format(line_no, line_statement)
+            print("\n{}\nWhat's the type of function {}?" .format(where, p[1]))
+            print("Types available: int, float, char, string, bool, void")
             t = str(input()).strip()
-            p[0] = t + " " + _add_all(p[1:])
-            self.is_defined.add(p[1])
+            t = self._check_type(t)
+            p[0] = t + p[0]
             self.cur_func = p[1]
         else:
             p[0] = p[1] + " " + _add_all(p[2:])
-            self.is_defined.add(p[2])
             self.cur_func = p[2]
 
         self.funcs.add(p[0] + ";")
@@ -234,16 +264,55 @@ class pcodeParser:
     def p_func_par(self, p):
         """ func_par    : vartype ID
                         | ID
+                        | ID LBRACKET RBRACKET
+                        | vartype ID LBRACKET RBRACKET
+                        | ID LBRACKET single_elem RBRACKET
+                        | vartype ID LBRACKET single_elem RBRACKET
         """
         if len(p) == 3:
-            p[0] = p[0] + " " + p[1]
+            p[0] = p[1] + " " + p[2]
             self.func_pars[p[2]] = p[1]
-        else:
-            print("What's the type of %s" % p[1])
+            line_no = p.lineno(1)
+            self._add_parameter(p[2], is_defined=True, line_no=line_no, line_statement=p[0], var_type=p[1])
+
+        elif len(p) == 2:
+            line_no = p.lineno(1)
+            line_statement = p[0]
+            where = "In line {:<5}{}" .format(line_no, line_statement)
+            print("\n{}\nWhat's the type of {} in this function?" .format(where, p[1]))
+            print("Types available: array, int, float, char, string, bool, void")
+            t = str(input()).strip()
+            if t == "array":
+                print("What's the element type of array {} in this function?" .format(p[1]))
+                print("Types available: int, float, char, string, bool, void")
+                t = str(input()).strip()
+                t = self._check_type(t)
+                p[0] = t + " " + p[1] + "[]"
+                self.func_pars[p[1]] = t
+                self._add_parameter(p[1], is_defined=True, line_no=line_no, line_statement=None, var_type=t)
+            else:
+                t = self._check_type(t)
+                p[0] = t + " " + p[1]
+                self.func_pars[p[1]] = t
+                self._add_parameter(p[1], is_defined=True, line_no=line_no, line_statement=None, var_type=t)
+
+        elif p[2] == "[":
+            line_no = p.lineno(1)
+            line_statement = p[0]
+            where = "In line {:<5}{}" .format(line_no, line_statement)
+            print("\n{}\nWhat's the element type of array {} in this function?" .format(where, p[1]))
+            print("Types available: int, float, char, string, bool, void")
             t = str(input()).strip()
             t = self._check_type(t)
-            p[0] = t + " " + p[1]
+            p[0] = t + " " + p[1] + "[]"
             self.func_pars[p[1]] = t
+            self._add_parameter(p[1], is_defined=True, line_no=line_no, line_statement=None, var_type=t)
+
+        else:
+            p[0] = p[1] + " " + p[2] + "[]"
+            self.func_pars[p[2]] = p[1]
+            line_no = p.lineno(1)
+            self._add_parameter(p[2], is_defined=True, line_no=line_no, line_statement=p[0], var_type=p[1])
 
     def p_return(self, p):
         """ return  : RETURN expression SEMI """
@@ -266,28 +335,20 @@ class pcodeParser:
             iter_part = p[2] + "++"
         else:
             iter_part = p[2] + "+=" + p[8]
-        p[0] = "for(%s;%s;%s)" % (init_part, bool_part, iter_part)
+        p[0] = "for(%s; %s; %s)" % (init_part, bool_part, iter_part)
 
-        if not p[2] in self.is_defined:
-            print("What's the type of {}".format(p[2]))
-            t = input()
-            t = t.strip()
-            t = self._check_type(t)
-            self.is_defined.add(p[2])
-            p[0] = t + " " + p[2] + ";\n" + p[0]
+        if not p[2] in self.par_to_be_init.keys():
+            line_no = p.lineno(1)
+            self._add_parameter(p[2], line_no=line_no, line_statement=p[0], hint_type="int")
 
     def p_for_header_2(self, p):
         """ for_header_2    : FOR ID EQUALS expression SEMI boolexpre SEMI iterator
         """
-        p[0] = p[1] + "(" + p[2] + p[3] + p[4] + p[5] + p[6] + p[7] + p[8] + ")"
+        p[0] = "for(%s%s%s; %s; %s)" %(p[2], p[3], p[4], p[6], p[8])
 
-        if not p[2] in self.is_defined:
-            print("What's the type of {}".format(p[2]))
-            t = input()
-            t = t.strip()
-            t = self._check_type(t)
-            self.is_defined.add(p[2])
-            p[0] = t + " " + p[2] + ";\n" + p[0]
+        if not p[2] in self.par_to_be_init.keys():
+            line_no = p.lineno(1)
+            self._add_parameter(p[2], line_no=line_no, line_statement=p[0], hint_type="int")
 
     def p_for_header_3(self, p):
         """ for_header_3    : FOR LPAREN ID EQUALS expression SEMI boolexpre SEMI iterator RPAREN
@@ -296,25 +357,21 @@ class pcodeParser:
                             | FOR LPAREN SEMI boolexpre SEMI RPAREN
         """
         if len(p) == 11:
-            p[0] = p[3] + p[4] + p[5] + p[6] + p[7] + p[8] + p[9]
+            p[0] = "%s%s%s; %s; %s" %(p[3], p[4], p[5], p[7], p[9])
 
         elif len(p) == 10:
-            p[0] = p[3] + p[4] + p[5] + p[6] + p[7] + p[8]
+            p[0] = "%s%s%s; %s;" %(p[3], p[4], p[5], p[7])
 
         elif len(p) == 8:
-            p[0] = p[3] + p[4] + p[5] + p[6]
+            p[0] = "; %s; %s" %(p[4], p[6])
         else:
-            p[0] = p[3] + p[4] + p[5]
+            p[0] = "; %s;" %(p[4])
         p[0] = "for(" + p[0] + ")"
 
         if len(p) >= 10:
-            if not p[3] in self.is_defined:
-                print("What's the type of {}".format(p[3]))
-                t = input()
-                t = t.strip()
-                t = self._check_type(t)
-                self.is_defined.add(p[3])
-                p[0] = t + " " + p[3] + ";\n" + p[0]
+            if not p[3] in self.par_to_be_init.keys():
+                line_no = p.lineno(1)
+                self._add_parameter(p[2], line_no=line_no, line_statement=p[0], hint_type="int")
 
     # while
     def p_while(self, p):
@@ -363,10 +420,8 @@ class pcodeParser:
                         | return
         """
         p[0] = p[1]
-        # [TODO: adapt the format and try to add correct line number.]
-        # [TODO: gain the next statement after parameter definition.]
-        self.buf[1] = "\n{}" .format(p[0])
-        self.buf[0] = []
+        line_no = p.lineno(1)
+        self.buf = [line_no, p[1]]
 
     def p_arr_assignment(self, p):
         """ arr_assignment  : ID LBRACKET expression RBRACKET EQUALS expression SEMI
@@ -377,13 +432,10 @@ class pcodeParser:
         if len(p) == 10:
             p[0] = "for(int i = 0; i <= %s-%s; i++) %s[%s+i]%s%s;" % (p[5], p[3], p[1], p[3], p[7], p[8])
 
-        if not p[1] in self.is_defined:
-            print("What's the type of {}".format(p[1]))
-            t = input()
-            t = t.strip()
-            t = self._check_type(t)
-            self.is_defined.add(p[1])
-            self.par_to_be_init.add(t + " " + p[1] + "[MAXLENGTH]" + ";")
+        if not p[1] in self.par_to_be_init.keys():
+            line_no = p.lineno(1)
+            self._add_parameter(p[1], line_no=line_no, line_statement=p[0], init_method='array')
+
 
     # Variable types:
     def p_vartype(self, p):
@@ -405,9 +457,9 @@ class pcodeParser:
                     | SWAP LPAREN ID COMMA ID RPAREN SEMI
         """
         if len(p) == 7:
-            p[0] = "swap(%s, %s)" % (p[1], p[5])
+            p[0] = "swap(%s, %s);" % (p[1], p[5])
         else:
-            p[0] = "swap(%s, %s)" % (p[3], p[5])
+            p[0] = "swap(%s, %s);" % (p[3], p[5])
 
     # Assignment
     def p_assignment(self, p):
@@ -417,15 +469,15 @@ class pcodeParser:
                         | vartype ID EQUALS boolexpre SEMI
         """
         if len(p) == 5:
-            p[0] = p[1] + p[2] + p[3] + p[4]
+            p[0] = p[1] + " " + p[2] + " " + p[3] + p[4]
             if not p[1] in self.par_to_be_init.keys():
-                self.buf[0] = p[1]
-                # [TODO: adapt the format and try to add correct line number]
-                self._add_parameter(p[1], where="".join(self.buf[1]) + "\n" + p[0])
+                line_no = p.lineno(1)
+                self._add_parameter(p[1], line_no=line_no, line_statement=p[0])
 
         elif len(p) == 6:
-            self.is_defined.add(p[2])
-            p[0] = p[1] + " " + p[2] + p[3] + p[4] + p[5]
+            line_no = p.lineno(1)
+            p[0] = p[1] + " " + p[2] + " " + p[3] + " " + p[4] + p[5]
+            self._add_parameter(p[2], is_defined=True, line_no=line_no, line_statement=p[0], var_type=p[1]) # add initialized paramenters into the par_to_be_init
 
     # EQUALS
     def p_EQUALS(self, p):
@@ -503,13 +555,9 @@ class pcodeParser:
         """
         p[0] = p[1] + p[2] + ";"
 
-        if not p[1] in self.is_defined:
-            print("What's the type of {}".format(p[1]))
-            t = input()
-            t = t.strip()
-            t = self._check_type(t)
-            self.is_defined.add(p[1])
-            self.par_to_be_init.add(t + " " + p[1] + ";")
+        if not p[1] in self.par_to_be_init.keys():
+            line_no = p.lineno(1)
+            self._add_parameter(name=p[1], line_no=line_no, line_statement=p[0])
 
     def p_single_elem(self, p):
         """ single_elem : array_elem_sing
@@ -561,7 +609,6 @@ class pcodeParser:
 
     # Test it output
     def test(self, data):
-        self.plex.test(data)
         result = self.parser.parse(data)
         return result
 
@@ -575,8 +622,8 @@ def _add_all(p, delimited=""):
 
 
 if __name__ == "__main__":
-    import sys
     from pretty_code import index_code
+    from pretty_code import add_lib
 
     # Build the parser and try it out
     file_input = "./pcode1.txt"
@@ -588,7 +635,7 @@ if __name__ == "__main__":
         data = f.readlines()
     data = "".join(data)
     code = m.test(data)
-    code = index_code(code)
+    code = add_lib(index_code(code))
 
     with open(file_output, "w") as f:
         f.write(code)
