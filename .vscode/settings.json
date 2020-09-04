@@ -1,0 +1,32 @@
+{
+    //-------- 编辑器配置 --------
+
+    // 控制字体系列。
+    "editor.fontFamily": "Hack, 'Lucida Console'",
+
+    // 控制编辑器是否在左括号后自动插入右括号。
+    "editor.autoClosingBrackets": "always",
+
+    // 控制字体大小。
+    "editor.fontSize": 16,
+
+    // 控制行高。
+    "editor.lineHeight": 0,
+
+    // 控制行号的可见性
+    "editor.lineNumbers": "on",
+
+    // 检查错误
+    "python.linting.flake8Enabled": false,
+
+    "C_Cpp.errorSquiggles": "Disabled",
+    "files.associations": {
+        "cstdio": "cpp",
+        "cstdlib": "cpp",
+        "iostream": "cpp",
+        "chrono": "cpp"
+    },
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true,
+    "python.pythonPath": "C:\\ProgramData\\Anaconda3\\python.exe"
+}
