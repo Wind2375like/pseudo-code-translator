@@ -3,6 +3,8 @@ import ply.yacc as yacc
 # Get the token map from the lexer.  This is required.
 from pcodelex import pcodeLexer
 from variable_info import VarInfo
+import utils
+import structure
 import re
 
 
@@ -20,14 +22,18 @@ class pcodeParser:
         # [TODO: replace is define with par_to_be_init]
         self.is_defined = set()
         self.is_type = {"int", "float", "char", "string", "bool", "void"}
-        self.funcs = set()                  # function declarations
-        self.funcs_defines = set()          # function definitions
-        self.par_to_be_init = dict()        # parameters to be init: {'par_name': var_info}
-        self.func_pars = dict()             # functions' parameter and type
-        self.buf = []                       # buf
-        self.main_function = ""             # main function information
-        self.cur_func = "main"              # current function name
-        self.flag = 0                       # flag
+        self.funcs = set()  # function declarations
+        self.funcs_defines = set()  # function definitions
+        self.par_to_be_init = dict()  # parameters to be init: {'par_name': var_info}
+        self.func_pars = dict()  # functions' parameter and type
+        self.buf = []  # buf
+        self.main_function = ""  # main function information
+        self.cur_func = "main"  # current function name
+        self.flag = 0  # flag
+        self.structures = dict()  # structure definition
+        self.struct_objects = dict()  # struct objects
+        # [TODO: complete the global variable dictionary, so that we can create global variable outside the main]
+        self.global_variable = dict()  # global variable
 
     def _add_parameter(self, name, **kwargs):
         """
@@ -62,62 +68,64 @@ class pcodeParser:
         for par_name in self.par_to_be_init.keys():
             var_info = self.par_to_be_init[par_name]
             if var_info.is_defined == False:
-                where = "In line {:<5}{}" .format(var_info.line_no, var_info.line_statement)
-                if var_info.init_method == "normal":
-                    print("\n{}\nWhat's the type of {} in function {}?" .format(where, par_name, self.cur_func))
-                else:
-                    print("\n{}\nWhat's the element type of array {} in function {}?" .format(where, par_name, self.cur_func))
-                print("Types available: int, float, char, string, bool, void")
+                where = "\nIn line {:<5}{}".format(var_info.line_no, var_info.line_statement)
+                print(where)
+                if var_info.method == "normal":
+                    print("\nWhat's the type of {} in function {}?".format(par_name, self.cur_func))
+                elif var_info.method == "array":
+                    print("\nWhat's the element type of array {} in function {}?".format(par_name,
+                                                                                             self.cur_func))
+                elif var_info.method == "struct":
+                    print("\nWhat's the struct of {}?".format(par_name))
+
+                hint = ", ".join(self.is_type)
+                print("Types available: {} or new struct".format(hint))
                 t = str(input()).strip()
                 t = self._check_type(t)
 
-                """
-                init_val examples:
-                ''      -> 0
-                '4'     -> 4
-                '4.3'   -> 4.3
-                '"a"'   -> 'a'
-                '"abcd"'-> "abcd"
-                "'a'"   -> 'a'
-                "'abc'" -> "abc"
-                'a'     -> 'a'
-                'abcd'  -> "abcd"
-                """
-                print("What's the initial value of {}? (default is 0)". format(par_name))
-                init_val = str(input()).strip()
-                if init_val == '':
-                    init_val = 0
-                elif init_val.isdecimal():
-                    init_val = int(init_val)
+                if var_info.method == "struct":
+                    struct_object = structure.StructObject(self.structures[t], par_name)
+                    var_info.set_var_type(struct_object)
+                    var_info.make_definition()
                 else:
-                    try:
-                        init_val = float(init_val)
-                    except ValueError:
-                        if (len(re.findall(r'"(.*)"', init_val)) == 1):
-                            init_val = re.findall(r'"(.*)"', init_val)[0]
-                        elif (len(re.findall(r"'(.*)'", init_val)) == 1):
-                            init_val = re.findall(r"'(.*)'", init_val)[0]
+                    print("What's the initial value of {}? (default is 0)".format(par_name))
+                    init_val = str(input()).strip()
+                    init_val = utils.str_to_c_val(init_val)
 
-                        if len(init_val) == 1:
-                            init_val = "'{}'" .format(init_val)
-                        else:
-                            init_val = '"{}"' .format(init_val)
-                
-                var_info.set_init_val(init_val)
-                var_info.set_var_type(t)
+                    var_info.set_init_val(init_val)
+                    var_info.set_var_type(t)
                 var_info.make_definition()
+
             else:
                 # [TODO: 并查集？]
                 pass
+
+    def _create_structure(self, name):
+        struct_name = name
+        struct = structure.Structure(struct_name)
+        print("enter q to quit")
+        print("variable_type variable_name [init_val]")
+        answer = input().strip()
+        while answer != 'q':
+            answer = answer.split(" ")
+            if len(answer) == 2:
+                struct.add(answer[1], answer[0], 0)
+            if len(answer) == 3:
+                struct.add(answer[1], answer[0], answer[2])
+            answer = input()
+        self.structures[struct_name] = struct
+        return struct_name
 
     def _check_type(self, str):
         """ Check the variable types inputed by users.
             If it's illegal, correct it.
         """
         while not str in self.is_type:
-            print("{} is not a type. Input a correct type.".format(str))
-            str = input()
-            str = str.strip()
+            print("{} is not a type. If it is a new struct enter 'y' or re-enter the type?".format(str))
+            answer = input().strip()
+            if answer == 'y':
+                str = self._create_structure(str)
+                self.is_type.add(str)
         return str
 
     def correct_bool(self, str):
@@ -132,6 +140,9 @@ class pcodeParser:
     def p_pretty_code(self, p):
         """ pretty_code :   c_code"""
         h = ""
+        for k, v in self.structures.items():
+            h = h + v.make_definition()
+
         for i in self.funcs:
             h = h + i + "\n"
         h = h + "\n"
@@ -165,7 +176,7 @@ class pcodeParser:
         tmp = p[len(p) - 1]
         h = ""
         for v in self.par_to_be_init.values():
-            if v.is_defined == False:
+            if not v.is_defined:
                 j = v.definition
                 h = h + j + "\n"
         i = tmp.find("{")
@@ -232,18 +243,18 @@ class pcodeParser:
                         | vartype ID LPAREN func_pars RPAREN
         """
         if len(p) == 5:
-            p[0] = " " + _add_all(p[1:])
+            p[0] = " " + utils.add_all(p[1:])
             line_no = p.lineno(1)
             line_statement = p[0]
-            where = "In line {:<5}{}" .format(line_no, line_statement)
-            print("\n{}\nWhat's the type of function {}?" .format(where, p[1]))
+            where = "In line {:<5}{}".format(line_no, line_statement)
+            print("\n{}\nWhat's the type of function {}?".format(where, p[1]))
             print("Types available: int, float, char, string, bool, void")
             t = str(input()).strip()
             t = self._check_type(t)
             p[0] = t + p[0]
             self.cur_func = p[1]
         else:
-            p[0] = p[1] + " " + _add_all(p[2:])
+            p[0] = p[1] + " " + utils.add_all(p[2:])
             self.cur_func = p[2]
 
         self.funcs.add(p[0] + ";")
@@ -278,12 +289,12 @@ class pcodeParser:
         elif len(p) == 2:
             line_no = p.lineno(1)
             line_statement = p[0]
-            where = "In line {:<5}{}" .format(line_no, line_statement)
-            print("\n{}\nWhat's the type of {} in this function?" .format(where, p[1]))
+            where = "In line {:<5}{}".format(line_no, line_statement)
+            print("\n{}\nWhat's the type of {} in this function?".format(where, p[1]))
             print("Types available: array, int, float, char, string, bool, void")
             t = str(input()).strip()
             if t == "array":
-                print("What's the element type of array {} in this function?" .format(p[1]))
+                print("What's the element type of array {} in this function?".format(p[1]))
                 print("Types available: int, float, char, string, bool, void")
                 t = str(input()).strip()
                 t = self._check_type(t)
@@ -299,8 +310,8 @@ class pcodeParser:
         elif p[2] == "[":
             line_no = p.lineno(1)
             line_statement = p[0]
-            where = "In line {:<5}{}" .format(line_no, line_statement)
-            print("\n{}\nWhat's the element type of array {} in this function?" .format(where, p[1]))
+            where = "In line {:<5}{}".format(line_no, line_statement)
+            print("\n{}\nWhat's the element type of array {} in this function?".format(where, p[1]))
             print("Types available: int, float, char, string, bool, void")
             t = str(input()).strip()
             t = self._check_type(t)
@@ -344,7 +355,7 @@ class pcodeParser:
     def p_for_header_2(self, p):
         """ for_header_2    : FOR ID EQUALS expression SEMI boolexpre SEMI iterator
         """
-        p[0] = "for(%s%s%s; %s; %s)" %(p[2], p[3], p[4], p[6], p[8])
+        p[0] = "for(%s%s%s; %s; %s)" % (p[2], p[3], p[4], p[6], p[8])
 
         if not p[2] in self.par_to_be_init.keys():
             line_no = p.lineno(1)
@@ -357,15 +368,15 @@ class pcodeParser:
                             | FOR LPAREN SEMI boolexpre SEMI RPAREN
         """
         if len(p) == 11:
-            p[0] = "%s%s%s; %s; %s" %(p[3], p[4], p[5], p[7], p[9])
+            p[0] = "%s%s%s; %s; %s" % (p[3], p[4], p[5], p[7], p[9])
 
         elif len(p) == 10:
-            p[0] = "%s%s%s; %s;" %(p[3], p[4], p[5], p[7])
+            p[0] = "%s%s%s; %s;" % (p[3], p[4], p[5], p[7])
 
         elif len(p) == 8:
-            p[0] = "; %s; %s" %(p[4], p[6])
+            p[0] = "; %s; %s" % (p[4], p[6])
         else:
-            p[0] = "; %s;" %(p[4])
+            p[0] = "; %s;" % (p[4])
         p[0] = "for(" + p[0] + ")"
 
         if len(p) >= 10:
@@ -434,8 +445,7 @@ class pcodeParser:
 
         if not p[1] in self.par_to_be_init.keys():
             line_no = p.lineno(1)
-            self._add_parameter(p[1], line_no=line_no, line_statement=p[0], init_method='array')
-
+            self._add_parameter(p[1], line_no=line_no, line_statement=p[0], method='array')
 
     # Variable types:
     def p_vartype(self, p):
@@ -467,17 +477,25 @@ class pcodeParser:
                         | ID EQUALS boolexpre SEMI
                         | vartype ID EQUALS expression SEMI
                         | vartype ID EQUALS boolexpre SEMI
+                        | struct_elem EQUALS expression SEMI
         """
         if len(p) == 5:
             p[0] = p[1] + " " + p[2] + " " + p[3] + p[4]
-            if not p[1] in self.par_to_be_init.keys():
+            if "." in p[1]:
+                struct_object, struct_var = p[1].split(".")
+                if struct_object not in self.par_to_be_init.keys():
+                    line_no = p.lineno(1)
+                    self._add_parameter(struct_object, line_no=line_no, line_statement=p[0], method='struct')
+
+            elif not p[1] in self.par_to_be_init.keys():
                 line_no = p.lineno(1)
                 self._add_parameter(p[1], line_no=line_no, line_statement=p[0])
 
         elif len(p) == 6:
             line_no = p.lineno(1)
             p[0] = p[1] + " " + p[2] + " " + p[3] + " " + p[4] + p[5]
-            self._add_parameter(p[2], is_defined=True, line_no=line_no, line_statement=p[0], var_type=p[1]) # add initialized paramenters into the par_to_be_init
+            self._add_parameter(p[2], is_defined=True, line_no=line_no, line_statement=p[0],
+                                var_type=p[1])  # add initialized paramenters into the par_to_be_init
 
     # EQUALS
     def p_EQUALS(self, p):
@@ -559,6 +577,10 @@ class pcodeParser:
             line_no = p.lineno(1)
             self._add_parameter(name=p[1], line_no=line_no, line_statement=p[0])
 
+    def p_struct_elem(self, p):
+        """ struct_elem : ID DOT ID"""
+        p[0] = p[1] + p[2] + p[3]
+
     def p_single_elem(self, p):
         """ single_elem : array_elem_sing
                         | array_elem_multi
@@ -569,11 +591,14 @@ class pcodeParser:
                         | ID PLUSPLUS
                         | ID MINUSMINUS 
                         | call_func_1
+                        | struct_elem
         """
         if len(p) == 2:
             p[0] = p[1]
-        else:
+        elif len(p) == 3:
             p[0] = p[1] + p[2]
+        else:
+            p[0] = p[1] + p[2] + p[3]
 
     def p_expressions(self, p):
         """ expression  : expression PLUS expression 
@@ -613,17 +638,9 @@ class pcodeParser:
         return result
 
 
-def _add_all(p, delimited=""):
-    ret = ""
-    for i in range(len(p) - 1):
-        ret = ret + p[i] + delimited
-    ret = ret + p[-1]
-    return ret
-
-
 if __name__ == "__main__":
-    from pretty_code import index_code
-    from pretty_code import add_lib
+    from utils import index_code
+    from utils import add_lib
 
     # Build the parser and try it out
     file_input = "./pcode1.txt"
