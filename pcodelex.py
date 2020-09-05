@@ -75,7 +75,9 @@ class pcodeLexer:
         'LBRACKET', 'RBRACKET',     # [ ]
         'LBRACE', 'RBRACE',         # { }
         'COMMA', 'PERIOD',          # , .
-        'SEMI', 'COLON'            # ; :
+        'SEMI', 'COLON',            # ; :
+        
+        'DOT',
     ]
 
     ##
@@ -149,6 +151,8 @@ class pcodeLexer:
     t_PERIOD            = r'\.'
     t_SEMI              = r';'
     t_COLON             = r':'
+
+    t_DOT               = r'\.'
     
     ##
     ## Internal auxiliary methods
