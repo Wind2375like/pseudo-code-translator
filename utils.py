@@ -12,10 +12,14 @@ def index_code(code):
     index_num = 0
     text = []
     for l in lines:
+        if list(l).count("{") and list(l).count("}"):
+            buf = "\t"*index_num + l
+            text.append(buf+"\n")
+            continue
         index_num -= list(l).count("}")
-        buf = "\t" * index_num + l
+        buf = "\t"*index_num + l
         index_num += list(l).count("{")
-        text.append(buf + "\n")
+        text.append(buf+"\n")
     text = "".join(text)
     return text
 
